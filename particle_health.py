@@ -2,6 +2,9 @@ import json
 import os
 import requests
 import time
+import base64
+
+from langchain_community.tools.ainetwork.utils import authenticate
 
 
 class ParticleHealthClient:
@@ -16,28 +19,44 @@ class ParticleHealthClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.access_token = None
+        self.authenticated = False
 
     def authenticate(self):
-        """
-        Authenticate with the Particle Health API and obtain an access token.
-        """
-        headers = {
-            'client-id': self.client_id,
-            'client-secret': self.client_secret,
-        }
+        if self.authenticated:
+            return True
+        else:
+            # Set up the endpoint and headers for authorization
+            url = 'https://sandbox.particlehealth.com/auth'
+            headers = {
+                'client-id': self.client_id,
+                'client-secret': self.client_secret,
+            }
 
-        try:
-            response = requests.post(self.AUTH_URL, headers=headers)
-            response.raise_for_status()  # Raise an exception for HTTP errors
-            self.access_token = response.json().get('access_token')
-            if not self.access_token:
-                raise ValueError("Access token not found in the response.")
-            print("Authentication successful. Access token obtained.")
-        except requests.exceptions.RequestException as e:
-            print(f"Error during authentication: {e}")
-        except ValueError as e:
-            print(f"Error: {e}")
-        return self.access_token
+            # Send the request to the API
+            response = requests.post(url, headers=headers)
+
+            # Check if the request was successful
+            if response.status_code == 200:
+                # Get the raw response text
+                raw_response = response.text
+                print("Raw Response:", raw_response)
+
+                # Extract the access token from the response
+                if 'access_token' in raw_response:
+                    # Assuming the token is directly the value of access_token (no "=" sign in the response)
+                    access_token = raw_response.split('access_token=')[1].split('&')[
+                        0]  # Extract token before any other parameter (like "&")
+                    self.access_token = access_token
+                    print("Access Token:", self.access_token)
+                else:
+                    print("Access token not found in the response.")
+                self.authenticated = True
+            else:
+                print(f"Failed to authorize. Status code: {response.status_code}")
+                print("Response:", response.text)
+                self.authenticated = False
+
+        return self.authenticated
 
     def create_query(self, patient_data, use_cache=True):
         """
@@ -103,6 +122,13 @@ class ParticleHealthClient:
         except requests.exceptions.RequestException as e:
             print(f"Error downloading file: {e}")
         return None
+
+    def get_image(self, query_id, file_id):
+        # Example file returned as an image
+        image_path = "example.png"
+
+        with open(image_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
     def _get_headers(self):
         """
